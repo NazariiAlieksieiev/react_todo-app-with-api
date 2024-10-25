@@ -1,13 +1,7 @@
 /* eslint-disable jsx-a11y/label-has-associated-control */
 /* eslint-disable jsx-a11y/control-has-associated-label */
-import cn from 'classNames';
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import { TodoFilter } from './components/TodoFilter/TodoFilter';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { UserWarning } from './UserWarning';
 import {
   addTodo,
@@ -19,20 +13,10 @@ import {
 } from './api/todos';
 import { Todo } from './types/Todo';
 import { TodoList } from './components/TodoList/TodoList';
-
-enum ErrorMessage {
-  load = 'Unable to load todos',
-  title = 'Title should not be empty',
-  add = 'Unable to add a todo',
-  delete = 'Unable to delete a todo',
-  update = 'Unable to update a todo',
-}
-
-enum Status {
-  all = 'all',
-  active = 'active',
-  completed = 'completed',
-}
+import { Status } from './types/Status';
+import { ErrorMessage } from './types/ErrorMessage';
+import { TodoForm } from './components/TodoForm/TodoForm';
+import { Notification } from './components/Notification/Notification';
 
 export const App: React.FC = () => {
   const [todos, setTodos] = useState<Todo[]>([]);
@@ -41,32 +25,10 @@ export const App: React.FC = () => {
   const [selectedTodoId, setSelectedTodoId] = useState<number[]>([]);
   const [todoTitle, setTodoTitle] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
-  const [isActive, setIsActive] = useState(false);
   const [tempTodo, setTempTodo] = useState<Todo | null>(null);
   const [isEditing, setIsEditing] = useState<number | null>(null);
   const [newTodoTitle, setNewTodoTitle] = useState('');
   const [isFailed, setIsFailed] = useState(false);
-  const titleField = useRef<HTMLInputElement>(null);
-
-  const todosCounter = useMemo(() => {
-    const notCompletedTodos = todos.filter(todo => !todo.completed).length;
-    const message =
-      notCompletedTodos === 1
-        ? `${notCompletedTodos} item left`
-        : `${notCompletedTodos} items left`;
-
-    return message;
-  }, [todos]);
-  const completedTodos = useMemo(() => {
-    const completed = todos.filter(todo => todo.completed).length;
-
-    return completed;
-  }, [todos]);
-  const hasError = useMemo(() => !Boolean(errorMessage), [errorMessage]);
-  const isActiveButton = useCallback(
-    (value: string) => value === status,
-    [status],
-  );
 
   const onAutoCloseNotification = useCallback(() => {
     setTimeout(() => {
@@ -215,54 +177,27 @@ export const App: React.FC = () => {
   };
 
   const handleToggleAll = async () => {
-    const toToggleIds: number[] = [];
-    const isAllCompleted = todos.every(todo => todo.completed === true);
+    const allCompleted = todos.every(todo => todo.completed);
+    const completed = !allCompleted;
+    const updatedIds = todos
+      .filter(todo => todo.completed !== completed)
+      .map(todo => todo.id);
 
+    setSelectedTodoId(updatedIds);
     setIsProcessing(true);
 
-    if (isAllCompleted) {
-      try {
-        await Promise.all(
-          todos.map(async todo => {
-            try {
-              await toggleTodo(todo.id, todo.completed);
-              toToggleIds.push(todo.id);
-            } catch {
-              setErrorMessage(ErrorMessage.update);
-              onAutoCloseNotification();
-            }
-          }),
-        );
-
-        setTodos(prev => {
-          const newTodos = prev.map(todo => ({
-            ...todo,
-            completed: !todo.completed,
-          }));
-
-          return newTodos;
-        });
-      } catch {
-        setErrorMessage(ErrorMessage.update);
-        onAutoCloseNotification();
-      } finally {
-        setIsProcessing(false);
-      }
-    } else {
-      try {
-        await Promise.all(
-          todos.map(async (todo, i) => {
-            if (todo.completed === false) {
-              handleToggleTodo(todo.id, i);
-            }
-          }),
-        );
-      } catch {
-        setErrorMessage(ErrorMessage.update);
-        onAutoCloseNotification();
-      } finally {
-        setIsProcessing(false);
-      }
+    try {
+      await Promise.all(
+        todos
+          .filter(todo => todo.completed !== completed)
+          .map(async todo => toggleTodo(todo.id, completed)),
+      );
+      setTodos(prevTodos => prevTodos.map(todo => ({ ...todo, completed })));
+    } catch {
+      setErrorMessage(ErrorMessage.update);
+    } finally {
+      setIsProcessing(false);
+      setSelectedTodoId([]);
     }
   };
 
@@ -330,24 +265,6 @@ export const App: React.FC = () => {
   };
 
   useEffect(() => {
-    const currentField = titleField.current;
-
-    if (currentField !== null) {
-      currentField.focus();
-    }
-  }, [titleField, todos, tempTodo]);
-
-  useEffect(() => {
-    const isAllCompleted = todos.every(todo => todo.completed === true);
-
-    if (isAllCompleted && todos.length > 0) {
-      setIsActive(true);
-    } else {
-      setIsActive(false);
-    }
-  }, [todos]);
-
-  useEffect(() => {
     getTodos()
       .then(downloadedTodos => {
         setTodos(downloadedTodos);
@@ -370,29 +287,15 @@ export const App: React.FC = () => {
       <h1 className="todoapp__title">todos</h1>
 
       <div className="todoapp__content">
-        <header className="todoapp__header">
-          {todos.length > 0 && (
-            <button
-              type="button"
-              className={cn('todoapp__toggle-all', { active: isActive })}
-              data-cy="ToggleAllButton"
-              onClick={handleToggleAll}
-            />
-          )}
-
-          <form onSubmit={handleNewTodoForm}>
-            <input
-              data-cy="NewTodoField"
-              type="text"
-              className="todoapp__new-todo"
-              placeholder="What needs to be done?"
-              onChange={event => setTodoTitle(event.target.value)}
-              value={todoTitle}
-              ref={titleField}
-              disabled={isProcessing}
-            />
-          </form>
-        </header>
+        <TodoForm
+          todos={todos}
+          todoTitle={todoTitle}
+          isProcessing={isProcessing}
+          tempTodo={tempTodo}
+          onNewTodo={handleNewTodoForm}
+          onTodoTitle={setTodoTitle}
+          onToggleAll={handleToggleAll}
+        />
 
         <TodoList
           todos={visibleTodos}
@@ -409,71 +312,19 @@ export const App: React.FC = () => {
         />
 
         {todos.length > 0 && (
-          <footer className="todoapp__footer" data-cy="Footer">
-            <span className="todo-count" data-cy="TodosCounter">
-              {todosCounter}
-            </span>
-
-            <nav className="filter" data-cy="Filter" onClick={onSetStatus}>
-              <a
-                href="#/"
-                className={cn('filter__link', {
-                  selected: isActiveButton(Status.all),
-                })}
-                data-cy="FilterLinkAll"
-              >
-                All
-              </a>
-
-              <a
-                href={`#/${Status.active}`}
-                className={cn('filter__link', {
-                  selected: isActiveButton(Status.active),
-                })}
-                data-cy="FilterLinkActive"
-              >
-                Active
-              </a>
-
-              <a
-                href={`#/${Status.completed}`}
-                className={cn('filter__link', {
-                  selected: isActiveButton(Status.completed),
-                })}
-                data-cy="FilterLinkCompleted"
-              >
-                Completed
-              </a>
-            </nav>
-
-            <button
-              type="button"
-              className="todoapp__clear-completed"
-              data-cy="ClearCompletedButton"
-              onClick={handleClearCompleted}
-              disabled={completedTodos === 0}
-            >
-              Clear completed
-            </button>
-          </footer>
+          <TodoFilter
+            todos={todos}
+            status={status}
+            onSetStatus={onSetStatus}
+            onClearCompleted={handleClearCompleted}
+          />
         )}
       </div>
 
-      <div
-        data-cy="ErrorNotification"
-        className={cn(
-          'notification is-danger is-light has-text-weight-normal',
-          { hidden: hasError },
-        )}
-      >
-        <button
-          data-cy="HideErrorButton"
-          type="button"
-          className="delete"
-          onClick={onCloseNotification}
-        />
-        {errorMessage}
-      </div>
+      <Notification
+        errorMessage={errorMessage}
+        onCloseNotification={onCloseNotification}
+      />
     </div>
   );
 };
