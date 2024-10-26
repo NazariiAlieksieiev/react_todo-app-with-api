@@ -37,6 +37,14 @@ export const TodoFilter: React.FC<Props> = ({
     [status],
   );
 
+  const capitalize = useCallback((word: string) => {
+    if (!word) {
+      return '';
+    }
+
+    return word[0].toUpperCase() + word.slice(1).toLowerCase();
+  }, []);
+
   return (
     <footer className="todoapp__footer" data-cy="Footer">
       <span className="todo-count" data-cy="TodosCounter">
@@ -44,35 +52,18 @@ export const TodoFilter: React.FC<Props> = ({
       </span>
 
       <nav className="filter" data-cy="Filter" onClick={onSetStatus}>
-        <a
-          href="#/"
-          className={cn('filter__link', {
-            selected: isActiveButton(Status.all),
-          })}
-          data-cy="FilterLinkAll"
-        >
-          All
-        </a>
-
-        <a
-          href={`#/${Status.active}`}
-          className={cn('filter__link', {
-            selected: isActiveButton(Status.active),
-          })}
-          data-cy="FilterLinkActive"
-        >
-          Active
-        </a>
-
-        <a
-          href={`#/${Status.completed}`}
-          className={cn('filter__link', {
-            selected: isActiveButton(Status.completed),
-          })}
-          data-cy="FilterLinkCompleted"
-        >
-          Completed
-        </a>
+        {Object.values(Status).map(statusValue => (
+          <a
+            href={`#/${statusValue}`}
+            className={cn('filter__link', {
+              selected: isActiveButton(statusValue),
+            })}
+            data-cy={`FilterLink${capitalize(statusValue)}`}
+            key={statusValue}
+          >
+            {capitalize(statusValue)}
+          </a>
+        ))}
       </nav>
 
       <button
